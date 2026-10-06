@@ -5,13 +5,15 @@ parce que c'est elle qui explique pourquoi le bug est si difficile à reproduire
 
 ## Versions testées
 
-|               | Python | Django | django-pgtrigger | mypy  |
-| ------------- | ------ | ------ | ---------------- | ----- |
-| Combinaison A | 3.14.6 | 6.1.2  | 4.17.0           | 2.3.1 |
+- Python: 3.14.6 
+- Django: 6.1.2
+- django-pgtrigger: 4.17.0
+- django-stubs: 6.1.2
+- mypy: 2.3.1
 
 ---
 
-## Étape 1 · Monter un environnement isolé
+## Étape 1: Monter un environnement isolé
 
 ```powershell
 mkdir test-mypy
@@ -33,9 +35,9 @@ mypy 2.3.1 (compiled: yes)
 
 ---
 
-## Étape 2 · Reproduire le symptôme
+## Étape 2: Reproduire le symptôme
 
-`foo.py` :
+`foo.py`:
 
 ```python
 import pgtrigger
@@ -57,9 +59,9 @@ Found 1 error in 1 file (checked 1 source file)
 
 ---
 
-## Étape 3 · Demander à mypy quelle signature il applique
+## Étape 3: Demander à mypy quelle signature il applique
 
-Première question utile : mypy se trompe-t-il sur l'argument, ou sur le constructeur tout entier ?
+Première question utile: mypy se trompe-t-il sur l'argument, ou sur le constructeur tout entier ?
 
 `foo2.py` :
 
@@ -98,7 +100,7 @@ La piste n'est donc pas « mypy ne connaît pas `foo_bar` », mais « mypy regar
 
 ---
 
-## Étape 4 · Regarder la définition de `Q` dans pgtrigger
+## Étape 4: Regarder la définition de `Q` dans pgtrigger
 
 ```powershell
 py -c "import importlib.util as u, os; print(os.path.dirname(u.find_spec('pgtrigger').origin))"
@@ -126,7 +128,7 @@ Héritage multiple, et la seconde base porte exactement la signature que `reveal
 
 ---
 
-## Étape 5 · Vérifier qui déclare ses types
+## Étape 5: Vérifier qui déclare ses types
 
 ```powershell
 py -m pip show -f django-pgtrigger | Select-String "py.typed"
@@ -143,7 +145,7 @@ La seconde commande ne renvoie rien.
 
 ---
 
-## Étape 6 · La tentative d'isolation qui échoue
+## Étape 6: La tentative d'isolation qui échoue
 
 C'est l'étape la plus instructive. Reproduire la même structure hors de Django, avec une classe sans annotations :
 
@@ -173,7 +175,7 @@ il faut une base que mypy ne peut pas résoudre du tout.
 
 ---
 
-## Étape 7 · L'isolation qui réussit
+## Étape 7: L'isolation qui réussit
 
 `demo.py` met les deux cas côte à côte :
 
@@ -222,7 +224,7 @@ Même structure, mêmes noms, même ordre des bases. Seule l'origine de la premi
 
 ---
 
-## Étape 8 · Deux variantes pour cerner la règle
+## Étape 8: Deux variantes pour cerner la règle
 
 **L'ordre des bases change-t-il quelque chose ?**
 
@@ -252,7 +254,7 @@ Permissif. Il faut donc **les deux à la fois** : une base non résolue et une b
 
 ---
 
-## Étape 9 · Chercher la règle dans le code de mypy
+## Étape 9: Chercher la règle dans le code de mypy
 
 Pour vérifier que mypy nomme bien ce cas :
 
@@ -272,7 +274,7 @@ Localiser les trois passages concernés :
 py -c "import mypy, os, re; d=os.path.dirname(mypy.__file__); print(d); [print(f'  {f}:{i}  {l.rstrip()}') for f,p in [('semanal.py',r'info\.fallback_to_any = True'),('nodes.py',r'^\s*fallback_to_any: bool'),('checkmember.py',r'if itype\.type\.fallback_to_any:')] for i,l in enumerate(open(os.path.join(d,f),encoding='utf8'),1) if re.search(p,l)]"
 ```
 
-En mypy 2.3.1 : `semanal.py:2687`, `nodes.py:3751`, `checkmember.py:627`.
+En mypy 2.3.1: `semanal.py:2687`, `nodes.py:3751`, `checkmember.py:627`.
 
 **`semanal.py:2680`**, branche qui traite les bases d'une classe :
 
@@ -283,7 +285,7 @@ elif isinstance(base, AnyType):
     info.fallback_to_any = True
 ```
 
-Remontez de quelques lignes : les bases valides font un
+Remontez de quelques lignes: les bases valides font un
 `base_types.append(base)`. Celle-ci ne le fait pas. Elle pose seulement un
 drapeau, et **n'entre donc pas dans la MRO**.
 
@@ -306,7 +308,7 @@ if itype.type.fallback_to_any:
 # Could not find the member.
 ```
 
-Notez la position : après toute la recherche dans la MRO, juste avant le
+Notez la position: après toute la recherche dans la MRO, juste avant le
 message d'erreur. C'est un dernier recours, pas une règle prioritaire.
 
 **Ce qui explique les trois observations de l'étape 8 :**
@@ -319,9 +321,9 @@ message d'erreur. C'est un dernier recours, pas une règle prioritaire.
 
 ---
 
-## Étape 10 · Confirmer par django-stubs
+## Étape 10: Confirmer par django-stubs
 
-Dernier test, par l'autre bout : rendre Django analysable.
+Dernier test: rendre Django analysable.
 
 ```powershell
 py -m pip install django-stubs
@@ -338,16 +340,14 @@ foo2.py:3: note: Revealed type is "def (self: django.db.models.query_utils.Q, *a
 Success: no issues found in 1 source file
 ```
 
-Aucune ligne du code n'a changé. `models.Q` n'est plus `Any`, elle redevient
-une base réelle, entre dans la MRO en première position, et sa signature
-l'emporte sur celle de `Condition`.
+Aucune ligne du code n'a changé. `models.Q` n'est plus `Any`, elle redevient une base réelle, entre dans la MRO en première position, 
+et sa signature l'emporte sur celle de `Condition`.
 
 ```powershell
 py -m pip uninstall django-stubs
 ```
 
-> À faire avant de rejouer les étapes précédentes, sinon le faux positif ne se
-> reproduit plus.
+> À faire avant de rejouer les étapes précédentes, sinon le faux positif ne se reproduit plus.
 
 ---
 
