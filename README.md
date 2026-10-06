@@ -1,9 +1,7 @@
 # Pourquoi mypy refuse `pgtrigger.Q(foo_bar=42)`
 
-Ce dépôt reprend les étapes dans l'ordre où je les ai suivies, 
-y compris **la tentative d'isolation qui a échoué**, 
-parce que c'est elle qui explique pourquoi le bug est si difficile à
-reproduire hors de Django.
+Ce dépôt reprend les étapes dans l'ordre où je les ai suivies, y compris **la tentative d'isolation qui a échoué**, 
+parce que c'est elle qui explique pourquoi le bug est si difficile à reproduire hors de Django.
 
 ## Versions testées
 
